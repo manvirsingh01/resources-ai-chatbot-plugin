@@ -5,13 +5,11 @@ This module provides a unified interface for running DeepEval metrics
 on chatbot responses to assess quality.
 """
 
-import os
 from typing import Dict, Any, Optional
 from dataclasses import dataclass
 
 # Check if deepeval is available
 try:
-    from deepeval import evaluate
     from deepeval.metrics import (
         FaithfulnessMetric,
         ContextualRecallMetric,
@@ -38,17 +36,17 @@ class EvaluationResult:
 class EvaluationMetrics:
     """
     Wrapper class for DeepEval metrics used in LLM-as-a-judge evaluation.
-    
+
     Metrics:
     - Faithfulness: Did the response make things up? (hallucination detection)
     - Context Recall: Did the retriever find the right documents?
     - Answer Relevancy: Did the response actually answer the question?
     """
-    
+
     def __init__(self, model: Optional[str] = None, mock_mode: bool = False):
         """
         Initialize evaluation metrics.
-        
+
         Args:
             model: The LLM model to use as judge (default: gpt-4o-mini)
             mock_mode: If True, return mock scores for testing without API calls
@@ -56,16 +54,16 @@ class EvaluationMetrics:
         self.model = model or EVAL_MODEL
         self.mock_mode = mock_mode
         self.thresholds = THRESHOLDS
-        
+
         if not mock_mode and not DEEPEVAL_AVAILABLE:
             raise ImportError(
                 "DeepEval is required for evaluation. "
                 "Install it with: pip install deepeval"
             )
-        
+
         if not mock_mode:
             self._init_metrics()
-    
+
     def _init_metrics(self):
         """Initialize DeepEval metric instances."""
         self.faithfulness_metric = FaithfulnessMetric(
@@ -83,7 +81,7 @@ class EvaluationMetrics:
             model=self.model,
             include_reason=True
         )
-    
+
     def evaluate_single(
         self,
         question: str,
@@ -93,19 +91,19 @@ class EvaluationMetrics:
     ) -> EvaluationResult:
         """
         Evaluate a single Q&A pair against all metrics.
-        
+
         Args:
             question: The user's question
             answer: The chatbot's generated answer
             context: The retrieved context used to generate the answer
             expected_answer: The expected/ground truth answer
-        
+
         Returns:
             EvaluationResult with scores for all metrics
         """
         if self.mock_mode:
             return self._mock_evaluate()
-        
+
         # Create test case
         test_case = LLMTestCase(
             input=question,
@@ -113,24 +111,24 @@ class EvaluationMetrics:
             expected_output=expected_answer,
             retrieval_context=[context] if isinstance(context, str) else context
         )
-        
+
         # Run each metric
         self.faithfulness_metric.measure(test_case)
         self.context_recall_metric.measure(test_case)
         self.answer_relevancy_metric.measure(test_case)
-        
+
         # Collect results
         faithfulness_score = self.faithfulness_metric.score
         context_recall_score = self.context_recall_metric.score
         answer_relevancy_score = self.answer_relevancy_metric.score
-        
+
         # Check if all thresholds are met
         passed = (
             faithfulness_score >= self.thresholds["faithfulness"] and
             context_recall_score >= self.thresholds["context_recall"] and
             answer_relevancy_score >= self.thresholds["answer_relevancy"]
         )
-        
+
         return EvaluationResult(
             faithfulness=faithfulness_score,
             context_recall=context_recall_score,
@@ -142,22 +140,22 @@ class EvaluationMetrics:
                 "answer_relevancy_reason": self.answer_relevancy_metric.reason,
             }
         )
-    
+
     def _mock_evaluate(self) -> EvaluationResult:
         """Return mock evaluation results for testing."""
-        import random
-        
+        import random  # pylint: disable=import-outside-toplevel
+
         # Generate realistic mock scores
         faithfulness = random.uniform(0.80, 0.95)
         context_recall = random.uniform(0.65, 0.85)
         answer_relevancy = random.uniform(0.70, 0.90)
-        
+
         passed = (
             faithfulness >= self.thresholds["faithfulness"] and
             context_recall >= self.thresholds["context_recall"] and
             answer_relevancy >= self.thresholds["answer_relevancy"]
         )
-        
+
         return EvaluationResult(
             faithfulness=faithfulness,
             context_recall=context_recall,
@@ -169,17 +167,17 @@ class EvaluationMetrics:
                 "answer_relevancy_reason": "Mock evaluation - no API call made",
             }
         )
-    
+
     def evaluate_batch(
         self,
         test_cases: list
     ) -> Dict[str, Any]:
         """
         Evaluate a batch of test cases and return aggregate scores.
-        
+
         Args:
             test_cases: List of dicts with keys: question, answer, context, expected_answer
-        
+
         Returns:
             Dict with average scores and individual results
         """
@@ -192,19 +190,19 @@ class EvaluationMetrics:
                 expected_answer=tc["expected_answer"]
             )
             results.append(result)
-        
+
         # Calculate averages
         avg_faithfulness = sum(r.faithfulness for r in results) / len(results)
         avg_context_recall = sum(r.context_recall for r in results) / len(results)
         avg_answer_relevancy = sum(r.answer_relevancy for r in results) / len(results)
-        
+
         # Check overall pass
         overall_passed = (
             avg_faithfulness >= self.thresholds["faithfulness"] and
             avg_context_recall >= self.thresholds["context_recall"] and
             avg_answer_relevancy >= self.thresholds["answer_relevancy"]
         )
-        
+
         return {
             "average_scores": {
                 "faithfulness": avg_faithfulness,
