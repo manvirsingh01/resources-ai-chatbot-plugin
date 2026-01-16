@@ -6,6 +6,12 @@ pytest-cov==6.2.1
 pytest-mock==3.14.1
 
 # =========================
+# LLM Evaluation (optional)
+# =========================
+deepeval==2.0.1
+openai>=1.0.0
+
+# =========================
 # Core API Dependencies
 # =========================
 fastapi==0.115.12
